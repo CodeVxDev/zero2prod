@@ -1,4 +1,4 @@
 fn main() {
     println!("Hello, world!");
-    let _str = String::from("test");
+    let _str = String::from("test3");
 }
