@@ -1,4 +1,6 @@
+use sqlx::{Connection, PgConnection};
 use std::net::TcpListener;
+use zero2prod::configuration::get_configuration;
 
 // `tokio::test` is the testing equivalent of `tokio::main`.
 // It also spares you from having to specify the `#[test]` attribute.
@@ -22,6 +24,11 @@ async fn health_check_works() {
 #[tokio::test]
 async fn subscribe_returns_a_200_for_valid_form_data() {
     let address = spawn_app();
+    let configuration = get_configuration().expect("Unable to read database configuration");
+    let connection_string = configuration.database.connection_string();
+    let mut connection = PgConnection::connect(&connection_string)
+        .await
+        .expect("Failed to connect to Database");
     let client = reqwest::Client::new();
     let body = "name=Mitali%20Madhusmita&email=mitali.kunmun%40gmail.com";
     let response = client
@@ -33,6 +40,13 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
         .expect("Failed to execute the request.");
 
     assert_eq!(200, response.status());
+
+    let saved = sqlx::query!("SELECT email, name FROM subscriptions",)
+        .fetch_one(&mut connection)
+        .await
+        .expect("Failed to read form the Database.");
+    assert_eq!(saved.email, "mitali.kunmun%40gmail.com");
+    assert_eq!(saved.name, "Mitali%20Madhusmita");
 }
 
 #[tokio::test]
@@ -70,7 +84,7 @@ fn spawn_app() -> String {
     // but we have no use for it here, hence the non-binding let
     let listner = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to a random port");
     let port = listner.local_addr().unwrap().port();
-    let server = zero2prod::run(listner).expect("Failed to bind the server");
+    let server = zero2prod::startup::run(listner).expect("Failed to bind the server");
     let _ = tokio::spawn(server);
     format!("http://localhost:{}", port)
 }
